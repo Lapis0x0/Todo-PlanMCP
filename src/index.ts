@@ -394,7 +394,62 @@ ${todos.content[0].text}
         res.json({ status: 'ok', server: 'learning-mcp-server' });
       });
       
-      // MCP 工具调用端点
+      // MCP 协议根端点 - 处理所有 MCP 请求
+      app.post('/', authenticate, async (req: Request, res: Response) => {
+        try {
+          const { method, params } = req.body;
+          
+          switch (method) {
+            case 'tools/list':
+              res.json({
+                jsonrpc: '2.0',
+                id: req.body.id,
+                result: { tools: this.getTools() }
+              });
+              break;
+              
+            case 'tools/call':
+              const result = await this.callTool(params.name, params.arguments || {}, req.headers as Record<string, string>);
+              res.json({
+                jsonrpc: '2.0',
+                id: req.body.id,
+                result
+              });
+              break;
+              
+            case 'resources/list':
+              res.json({
+                jsonrpc: '2.0',
+                id: req.body.id,
+                result: { resources: await this.getResources() }
+              });
+              break;
+              
+            case 'prompts/list':
+              res.json({
+                jsonrpc: '2.0',
+                id: req.body.id,
+                result: { prompts: this.getPrompts() }
+              });
+              break;
+              
+            default:
+              res.status(400).json({
+                jsonrpc: '2.0',
+                id: req.body.id,
+                error: { code: -32601, message: `Method not found: ${method}` }
+              });
+          }
+        } catch (error) {
+          res.status(500).json({
+            jsonrpc: '2.0',
+            id: req.body.id,
+            error: { code: -32603, message: error instanceof Error ? error.message : String(error) }
+          });
+        }
+      });
+      
+      // 兼容性端点 - 自定义 HTTP API
       app.post('/tools/:toolName', authenticate, async (req: Request, res: Response) => {
         try {
           const result = await this.callTool(req.params.toolName, req.body, req.headers as Record<string, string>);

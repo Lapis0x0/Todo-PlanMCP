@@ -125,14 +125,14 @@
 }
 ```
 
-或者添加远程HTTP API实例（注意：Cherry Studio可能不直接支持HTTP API模式，建议使用本地模式）
+或者添加远程mcp实例
 
 ```json
 {
   "mcpServers": {
     "todo-plan-manager": {
-      "type": "http",
-      "url": "http://你的VPS-IP:3000",
+      "type": "streamableHttp",
+      "url": "http://your-vps-ip:3000",
       "headers": {
         "X-MCP-Auth": "your-secret-token"
       }
@@ -141,36 +141,22 @@
 }
 ```
 
-#### 远程客户端 (手机 App 或 HTTP API)
+#### 远程客户端 (手机 App)
 
-对于支持 HTTP API 的客户端，可以直接调用以下端点：
+配置 URL 和认证头以连接到您的远程服务器。
 
-**健康检查**
-```bash
-GET http://你的VPS-IP:3000/health
-```
-
-**获取工具列表**
-```bash
-GET http://你的VPS-IP:3000/tools
-Headers: X-MCP-Auth: your-secret-token
-```
-
-**调用工具**
-```bash
-POST http://你的VPS-IP:3000/tools/{toolName}
-Headers: 
-  X-MCP-Auth: your-secret-token
-  Content-Type: application/json
-Body: {工具参数}
-```
-
-**示例：添加任务**
-```bash
-curl -X POST http://你的VPS-IP:3000/tools/todo_add \
-  -H "X-MCP-Auth: your-secret-token" \
-  -H "Content-Type: application/json" \
-  -d '{"title": "学习 React", "priority": "high"}'
+```json
+{
+  "mcpServers": {
+    "todo-plan-manager": {
+      "type": "streamableHttp",
+      "url": "http://your-vps-ip:3000",
+      "headers": {
+        "X-MCP-Auth": "your-secret-token"
+      }
+    }
+  }
+}
 ```
 
 ## 🛠️ API 参考
