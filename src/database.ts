@@ -22,8 +22,10 @@ export class DatabaseManager {
     // 打开数据库连接
     this.db = new Database(this.dbPath);
     
-    // 启用 WAL 模式以提高性能
-    this.db.pragma('journal_mode = WAL');
+    // 使用 DELETE 模式确保立即同步，避免多实例冲突
+    this.db.pragma('journal_mode = DELETE');
+    this.db.pragma('synchronous = FULL');
+    this.db.pragma('locking_mode = NORMAL');
 
     // 创建表
     this.createTables();

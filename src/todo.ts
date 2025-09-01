@@ -254,13 +254,21 @@ export class TodoManager {
       };
     }
     
-    database.prepare('DELETE FROM todos WHERE id = ?').run(id);
+    const stmt = database.prepare('DELETE FROM todos WHERE id = ?');
+    const result = stmt.run(id);
+    
+    // 强制同步到磁盘
+    try {
+      database.pragma('wal_checkpoint(TRUNCATE)');
+    } catch (e) {
+      // WAL 模式可能未启用，忽略错误
+    }
     
     return {
       content: [
         {
           type: 'text',
-          text: `✅ 已删除任务：${todo.title}`,
+          text: `✅ 已删除任务：${todo.title} (影响行数: ${result.changes})`,
         },
       ],
     };
