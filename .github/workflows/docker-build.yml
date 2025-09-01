@@ -4,8 +4,20 @@ on:
   push:
     branches: [ main, master ]
     tags: [ 'v*' ]
+    paths:
+      - 'src/**'
+      - 'Dockerfile'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/docker-build.yml'
   pull_request:
     branches: [ main, master ]
+    paths:
+      - 'src/**'
+      - 'Dockerfile'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/docker-build.yml'
 
 env:
   REGISTRY: ghcr.io
