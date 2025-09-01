@@ -171,15 +171,6 @@ export class LearningMCPServer {
         },
       },
       {
-        name: 'get_learning_status',
-        description: '获取完整的学习状态概览（推荐在对话开始时调用）',
-        inputSchema: {
-          type: 'object',
-          properties: {},
-          required: [],
-        },
-      },
-      {
         name: 'note_create',
         description: '创建新笔记',
         inputSchema: {
@@ -327,8 +318,6 @@ export class LearningMCPServer {
           return await this.noteManager.listNotes(args);
         case 'note_search':
           return await this.noteManager.searchNotes(args.query);
-        case 'get_learning_status':
-          return await this.getLearningStatus();
         case 'summary_generate':
           return await this.generateSummary(args);
         default:
@@ -346,132 +335,6 @@ export class LearningMCPServer {
     }
   }
 
-  private async getLearningStatus() {
-    try {
-      const database = this.db.getDb();
-      
-      // 获取任务统计
-      const todoStats = database.prepare(`
-        SELECT 
-          status,
-          priority,
-          COUNT(*) as count
-        FROM todos 
-        GROUP BY status, priority
-        ORDER BY 
-          CASE status 
-            WHEN 'in_progress' THEN 1 
-            WHEN 'pending' THEN 2 
-            WHEN 'completed' THEN 3 
-            WHEN 'archived' THEN 4 
-          END,
-          CASE priority 
-            WHEN 'high' THEN 1 
-            WHEN 'medium' THEN 2 
-            WHEN 'low' THEN 3 
-          END
-      `).all();
-      
-      // 获取笔记统计
-      const noteStats = database.prepare(`
-        SELECT 
-          category,
-          COUNT(*) as count
-        FROM notes 
-        WHERE category IS NOT NULL
-        GROUP BY category
-        ORDER BY count DESC
-      `).all();
-      
-      // 获取最近的活动
-      const recentTodos = database.prepare(`
-        SELECT title, status, updated_at
-        FROM todos 
-        ORDER BY updated_at DESC 
-        LIMIT 3
-      `).all();
-      
-      let statusText = '# 学习状态概览\n\n';
-      
-      // 任务统计
-      statusText += '## 任务统计\n\n';
-      if (todoStats.length === 0) {
-        statusText += '暂无学习任务\n\n';
-      } else {
-        const totalTodos = todoStats.reduce((sum: number, stat: any) => sum + stat.count, 0);
-        statusText += `**总任务数**: ${totalTodos}\n\n`;
-        
-        for (const stat of todoStats) {
-          const statAny = stat as any;
-          const emojiMap: {[key: string]: string} = {
-            'in_progress': '🚀',
-            'pending': '📝', 
-            'completed': '✅',
-            'archived': '📦'
-          };
-          const emoji = emojiMap[statAny.status] || '📄';
-          
-          const priorityEmojiMap: {[key: string]: string} = {
-            'high': '🔴',
-            'medium': '🟡',
-            'low': '🟢'
-          };
-          const priorityEmoji = priorityEmojiMap[statAny.priority] || '⚪';
-          
-          statusText += `${emoji} ${statAny.status} (${priorityEmoji} ${statAny.priority}): ${statAny.count} 个\n`;
-        }
-        statusText += '\n';
-      }
-      
-      // 笔记统计  
-      statusText += '## 笔记分类\n\n';
-      if (noteStats.length === 0) {
-        statusText += '暂无学习笔记\n\n';
-      } else {
-        for (const stat of noteStats) {
-          const statAny = stat as any;
-          statusText += `📖 **${statAny.category}**: ${statAny.count} 篇笔记\n`;
-        }
-        statusText += '\n';
-      }
-      
-      // 最近活动
-      statusText += '## 最近活动\n\n';
-      if (recentTodos.length === 0) {
-        statusText += '暂无最近活动\n';
-      } else {
-        for (const todo of recentTodos) {
-          const todoAny = todo as any;
-          const statusEmojiMap: {[key: string]: string} = {
-            'in_progress': '🚀',
-            'pending': '📝',
-            'completed': '✅',
-            'archived': '📦'
-          };
-          const statusEmoji = statusEmojiMap[todoAny.status] || '📄';
-          statusText += `${statusEmoji} **${todoAny.title}** (${todoAny.updated_at})\n`;
-        }
-      }
-      
-      return {
-        content: [
-          {
-            type: 'text',
-            text: statusText,
-          },
-        ],
-      };
-    } catch (error) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `Error: ${error instanceof Error ? error.message : String(error)}`,
-          },
-        ],
-      };
-    }
-  }
 
   private async handleResourceRead(uri: string) {
     try {
