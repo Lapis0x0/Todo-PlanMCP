@@ -19,7 +19,7 @@ import { DatabaseManager } from './database.js';
 import { TodoManager } from './todo.js';
 import { NoteManager } from './notes.js';
 
-class LearningMCPServer {
+export class LearningMCPServer {
   private server: Server;
   private db: DatabaseManager;
   private todoManager: TodoManager;
@@ -88,16 +88,39 @@ class LearningMCPServer {
           type: 'object',
           properties: {
             title: { type: 'string', description: '任务标题' },
-            description: { type: 'string', description: '任务描述' },
             priority: { 
               type: 'string', 
               enum: ['high', 'medium', 'low'],
               description: '优先级' 
             },
-            category: { type: 'string', description: '分类（如：民法、深度学习等）' },
-            due_date: { type: 'string', description: '截止日期 (YYYY-MM-DD)' },
           },
           required: ['title'],
+        },
+      },
+      {
+        name: 'todo_add_batch',
+        description: '批量添加多个学习任务（适合对话开始时制定学习清单）',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            todos: {
+              type: 'array',
+              description: '任务列表',
+              items: {
+                type: 'object',
+                properties: {
+                  title: { type: 'string', description: '任务标题' },
+                  priority: { 
+                    type: 'string', 
+                    enum: ['high', 'medium', 'low'],
+                    description: '优先级' 
+                  },
+                },
+                required: ['title'],
+              },
+            },
+          },
+          required: ['todos'],
         },
       },
       {
@@ -145,6 +168,15 @@ class LearningMCPServer {
             id: { type: 'number', description: '任务ID' },
           },
           required: ['id'],
+        },
+      },
+      {
+        name: 'get_learning_status',
+        description: '获取完整的学习状态概览（推荐在对话开始时调用）',
+        inputSchema: {
+          type: 'object',
+          properties: {},
+          required: [],
         },
       },
       {
@@ -279,10 +311,12 @@ class LearningMCPServer {
       switch (name) {
         case 'todo_add':
           return await this.todoManager.addTodo(args);
+        case 'todo_add_batch':
+          return await this.todoManager.addTodos(args.todos);
         case 'todo_update':
           return await this.todoManager.updateTodo(args);
         case 'todo_list':
-          return await this.todoManager.listTodos(args);
+          return await this.todoManager.listTodos({});
         case 'todo_delete':
           return await this.todoManager.deleteTodo(args.id);
         case 'note_create':
@@ -293,11 +327,140 @@ class LearningMCPServer {
           return await this.noteManager.listNotes(args);
         case 'note_search':
           return await this.noteManager.searchNotes(args.query);
+        case 'get_learning_status':
+          return await this.getLearningStatus();
         case 'summary_generate':
           return await this.generateSummary(args);
         default:
           throw new Error(`Unknown tool: ${name}`);
       }
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Error: ${error instanceof Error ? error.message : String(error)}`,
+          },
+        ],
+      };
+    }
+  }
+
+  private async getLearningStatus() {
+    try {
+      const database = this.db.getDb();
+      
+      // 获取任务统计
+      const todoStats = database.prepare(`
+        SELECT 
+          status,
+          priority,
+          COUNT(*) as count
+        FROM todos 
+        GROUP BY status, priority
+        ORDER BY 
+          CASE status 
+            WHEN 'in_progress' THEN 1 
+            WHEN 'pending' THEN 2 
+            WHEN 'completed' THEN 3 
+            WHEN 'archived' THEN 4 
+          END,
+          CASE priority 
+            WHEN 'high' THEN 1 
+            WHEN 'medium' THEN 2 
+            WHEN 'low' THEN 3 
+          END
+      `).all();
+      
+      // 获取笔记统计
+      const noteStats = database.prepare(`
+        SELECT 
+          category,
+          COUNT(*) as count
+        FROM notes 
+        WHERE category IS NOT NULL
+        GROUP BY category
+        ORDER BY count DESC
+      `).all();
+      
+      // 获取最近的活动
+      const recentTodos = database.prepare(`
+        SELECT title, status, updated_at
+        FROM todos 
+        ORDER BY updated_at DESC 
+        LIMIT 3
+      `).all();
+      
+      let statusText = '# 学习状态概览\n\n';
+      
+      // 任务统计
+      statusText += '## 任务统计\n\n';
+      if (todoStats.length === 0) {
+        statusText += '暂无学习任务\n\n';
+      } else {
+        const totalTodos = todoStats.reduce((sum: number, stat: any) => sum + stat.count, 0);
+        statusText += `**总任务数**: ${totalTodos}\n\n`;
+        
+        for (const stat of todoStats) {
+          const statAny = stat as any;
+          const emojiMap: {[key: string]: string} = {
+            'in_progress': '🚀',
+            'pending': '📝', 
+            'completed': '✅',
+            'archived': '📦'
+          };
+          const emoji = emojiMap[statAny.status] || '📄';
+          
+          const priorityEmojiMap: {[key: string]: string} = {
+            'high': '🔴',
+            'medium': '🟡',
+            'low': '🟢'
+          };
+          const priorityEmoji = priorityEmojiMap[statAny.priority] || '⚪';
+          
+          statusText += `${emoji} ${statAny.status} (${priorityEmoji} ${statAny.priority}): ${statAny.count} 个\n`;
+        }
+        statusText += '\n';
+      }
+      
+      // 笔记统计  
+      statusText += '## 笔记分类\n\n';
+      if (noteStats.length === 0) {
+        statusText += '暂无学习笔记\n\n';
+      } else {
+        for (const stat of noteStats) {
+          const statAny = stat as any;
+          statusText += `📖 **${statAny.category}**: ${statAny.count} 篇笔记\n`;
+        }
+        statusText += '\n';
+      }
+      
+      // 最近活动
+      statusText += '## 最近活动\n\n';
+      if (recentTodos.length === 0) {
+        statusText += '暂无最近活动\n';
+      } else {
+        for (const todo of recentTodos) {
+          const todoAny = todo as any;
+          const statusEmojiMap: {[key: string]: string} = {
+            'in_progress': '🚀',
+            'pending': '📝',
+            'completed': '✅',
+            'archived': '📦'
+          };
+          const statusEmoji = statusEmojiMap[todoAny.status] || '📄';
+          statusText += `${statusEmoji} **${todoAny.title}** (${todoAny.updated_at})\n`;
+        }
+      }
+      
+      return {
+        content: [
+          {
+            type: 'text',
+            text: statusText,
+          },
+        ],
+      };
     } catch (error) {
       return {
         content: [

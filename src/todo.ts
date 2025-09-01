@@ -20,18 +20,15 @@ export class TodoManager {
     const database = this.db.getDb();
     
     const stmt = database.prepare(
-      `INSERT INTO todos (title, description, status, priority, category, progress, due_date)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO todos (title, status, priority, progress)
+       VALUES (?, ?, ?, ?)`
     );
     
     const result = stmt.run(
       todo.title,
-      todo.description || null,
       todo.status || 'pending',
       todo.priority || 'medium',
-      todo.category || null,
-      todo.progress || 0,
-      todo.due_date || null
+      todo.progress || 0
     );
 
     const newTodo = database.prepare('SELECT * FROM todos WHERE id = ?').get(result.lastInsertRowid) as any;
@@ -40,7 +37,41 @@ export class TodoManager {
       content: [
         {
           type: 'text',
-          text: `✅ 任务已创建：\n\n**${newTodo.title}**\n- ID: ${newTodo.id}\n- 优先级: ${newTodo.priority}\n- 状态: ${newTodo.status}\n${newTodo.category ? `- 分类: ${newTodo.category}\n` : ''}${newTodo.due_date ? `- 截止日期: ${newTodo.due_date}\n` : ''}`,
+          text: `✅ 任务已创建：\n\n**${newTodo.title}**\n- ID: ${newTodo.id}\n- 优先级: ${newTodo.priority}\n- 状态: ${newTodo.status}`,
+        },
+      ],
+    };
+  }
+
+  async addTodos(todos: Todo[]) {
+    const database = this.db.getDb();
+    
+    const stmt = database.prepare(
+      `INSERT INTO todos (title, status, priority, progress)
+       VALUES (?, ?, ?, ?)`
+    );
+    
+    const transaction = database.transaction((todoList: Todo[]) => {
+      const results = [];
+      for (const todo of todoList) {
+        const result = stmt.run(
+          todo.title,
+          todo.status || 'pending',
+          todo.priority || 'medium',
+          todo.progress || 0
+        );
+        results.push(result.lastInsertRowid);
+      }
+      return results;
+    });
+    
+    const insertedIds = transaction(todos);
+    
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `✅ 批量创建了 ${todos.length} 个任务：\n\n${todos.map((todo, index) => `${index + 1}. **${todo.title}** (${todo.priority || 'medium'} 优先级)`).join('\n')}\n\n📝 使用 list_todos 查看完整列表`,
         },
       ],
     };
@@ -52,7 +83,7 @@ export class TodoManager {
     const updates: string[] = [];
     const values: any[] = [];
     
-    const allowedFields = ['title', 'description', 'status', 'priority', 'category', 'progress', 'due_date'];
+    const allowedFields = ['title', 'status', 'priority', 'progress'];
     
     for (const field of allowedFields) {
       if (params[field] !== undefined) {
@@ -95,7 +126,7 @@ export class TodoManager {
       content: [
         {
           type: 'text',
-          text: `✅ 任务已更新：\n\n**${updatedTodo.title}**\n- ID: ${updatedTodo.id}\n- 优先级: ${updatedTodo.priority}\n- 状态: ${updatedTodo.status}\n- 进度: ${updatedTodo.progress}%\n${updatedTodo.category ? `- 分类: ${updatedTodo.category}\n` : ''}${updatedTodo.due_date ? `- 截止日期: ${updatedTodo.due_date}\n` : ''}`,
+          text: `✅ 任务已更新：\n\n**${updatedTodo.title}**\n- ID: ${updatedTodo.id}\n- 优先级: ${updatedTodo.priority}\n- 状态: ${updatedTodo.status}\n- 进度: ${updatedTodo.progress}%`,
         },
       ],
     };
@@ -191,27 +222,15 @@ export class TodoManager {
       high: '🔴',
       medium: '🟡',
       low: '🟢',
-    };
+    }[todo.priority as 'high' | 'medium' | 'low'] || '⚪';
     
-    let formatted = `### ${priorityEmoji[todo.priority as keyof typeof priorityEmoji] || '⚪'} [${todo.id}] ${todo.title}\n\n`;
-    
-    if (todo.description) {
-      formatted += `${todo.description}\n\n`;
-    }
+    let formatted = `### ${priorityEmoji} [${todo.id}] ${todo.title}\n\n`;
     
     formatted += `- **状态**: ${todo.status}\n`;
     formatted += `- **优先级**: ${todo.priority}\n`;
     
     if (todo.progress > 0) {
       formatted += `- **进度**: ${todo.progress}%\n`;
-    }
-    
-    if (todo.category) {
-      formatted += `- **分类**: ${todo.category}\n`;
-    }
-    
-    if (todo.due_date) {
-      formatted += `- **截止日期**: ${todo.due_date}\n`;
     }
     
     formatted += `- **创建时间**: ${todo.created_at}\n\n---\n\n`;
