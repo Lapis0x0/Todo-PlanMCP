@@ -97,6 +97,7 @@ export class LearningMCPServer {
               enum: ['high', 'medium', 'low'],
               description: '优先级' 
             },
+            agent: { type: 'string', description: 'Agent 标识（可选）' },
           },
           required: ['title'],
         },
@@ -119,6 +120,7 @@ export class LearningMCPServer {
                     enum: ['high', 'medium', 'low'],
                     description: '优先级' 
                   },
+                  agent: { type: 'string', description: 'Agent 标识（可选）' },
                 },
                 required: ['title'],
               },
@@ -145,6 +147,7 @@ export class LearningMCPServer {
               enum: ['high', 'medium', 'low'],
               description: '优先级'
             },
+            agent: { type: 'string', description: 'Agent 标识（可选）' },
           },
           required: ['id'],
         },
@@ -157,6 +160,7 @@ export class LearningMCPServer {
           properties: {
             status: { type: 'string', description: '筛选状态' },
             priority: { type: 'string', description: '筛选优先级' },
+            agent: { type: 'string', description: '按 Agent 过滤' },
           },
         },
       },
@@ -222,7 +226,8 @@ export class LearningMCPServer {
   }
 
   private validateAuth(headers?: Record<string, string>): boolean {
-    if (!headers) return false;
+    // 在 STDIO 模式下，MCP 请求通常没有 headers，此时应放行
+    if (!headers) return true;
     
     const authHeader = headers['x-mcp-auth'] || headers['X-MCP-Auth'];
     return authHeader === this.authToken;
@@ -250,7 +255,7 @@ export class LearningMCPServer {
         case 'todo_update':
           return await this.todoManager.updateTodo(args);
         case 'todo_list':
-          return await this.todoManager.listTodos({});
+          return await this.todoManager.listTodos(args);
         case 'todo_delete':
           return await this.todoManager.deleteTodo(args.id);
         default:

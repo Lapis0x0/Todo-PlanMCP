@@ -43,6 +43,7 @@ export class DatabaseManager {
         title TEXT NOT NULL,
         status TEXT DEFAULT 'pending',
         priority TEXT DEFAULT 'medium',
+        agent TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )
@@ -58,35 +59,47 @@ export class DatabaseManager {
     const hasCategory = columns.some(c => c.name === 'category');
     const hasDueDate = columns.some(c => c.name === 'due_date');
     const hasProgress = columns.some(c => c.name === 'progress');
-    const needsMigration = hasDescription || hasCategory || hasDueDate || hasProgress;
+    const hasAgent = columns.some(c => c.name === 'agent');
+    const needsRebuild = hasDescription || hasCategory || hasDueDate || hasProgress;
 
-    if (!needsMigration) return;
+    if (needsRebuild) {
+      const tx = (this.db as Database.Database).transaction(() => {
+        // 建立新表（包含 agent 列）
+        this.db!.exec(`
+          CREATE TABLE IF NOT EXISTS todos_new (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL,
+            status TEXT DEFAULT 'pending',
+            priority TEXT DEFAULT 'medium',
+            agent TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+          )
+        `);
 
-    const tx = (this.db as Database.Database).transaction(() => {
-      // 建立新表（目标结构）
-      this.db!.exec(`
-        CREATE TABLE IF NOT EXISTS todos_new (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          title TEXT NOT NULL,
-          status TEXT DEFAULT 'pending',
-          priority TEXT DEFAULT 'medium',
-          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        )
-      `);
+        // 迁移数据（保留 agent 列若存在，否则置为 NULL）
+        if (hasAgent) {
+          this.db!.exec(`
+            INSERT INTO todos_new (id, title, status, priority, agent, created_at, updated_at)
+            SELECT id, title, status, priority, agent, created_at, updated_at FROM todos
+          `);
+        } else {
+          this.db!.exec(`
+            INSERT INTO todos_new (id, title, status, priority, agent, created_at, updated_at)
+            SELECT id, title, status, priority, NULL as agent, created_at, updated_at FROM todos
+          `);
+        }
 
-      // 迁移数据（仅拷贝保留列）
-      this.db!.exec(`
-        INSERT INTO todos_new (id, title, status, priority, created_at, updated_at)
-        SELECT id, title, status, priority, created_at, updated_at FROM todos
-      `);
+        // 替换旧表
+        this.db!.exec('DROP TABLE todos');
+        this.db!.exec('ALTER TABLE todos_new RENAME TO todos');
+      });
 
-      // 替换旧表
-      this.db!.exec('DROP TABLE todos');
-      this.db!.exec('ALTER TABLE todos_new RENAME TO todos');
-    });
-
-    tx();
+      tx();
+    } else if (!hasAgent) {
+      // 无需重建，但缺少 agent 列，直接增加
+      this.db.exec("ALTER TABLE todos ADD COLUMN agent TEXT");
+    }
   }
 
   getDb(): Database.Database {

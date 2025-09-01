@@ -5,6 +5,7 @@ export interface Todo {
   title: string;
   status?: string;
   priority?: string;
+  agent?: string;
   created_at?: string;
   updated_at?: string;
 }
@@ -16,14 +17,15 @@ export class TodoManager {
     const database = this.db.getDb();
     
     const stmt = database.prepare(
-      `INSERT INTO todos (title, status, priority)
-       VALUES (?, ?, ?)`
+      `INSERT INTO todos (title, status, priority, agent)
+       VALUES (?, ?, ?, ?)`
     );
     
     const result = stmt.run(
       todo.title,
       todo.status || 'pending',
-      todo.priority || 'medium'
+      todo.priority || 'medium',
+      todo.agent || null
     );
 
     const newTodo = database.prepare('SELECT * FROM todos WHERE id = ?').get(result.lastInsertRowid) as any;
@@ -42,8 +44,8 @@ export class TodoManager {
     const database = this.db.getDb();
     
     const stmt = database.prepare(
-      `INSERT INTO todos (title, status, priority)
-       VALUES (?, ?, ?)`
+      `INSERT INTO todos (title, status, priority, agent)
+       VALUES (?, ?, ?, ?)`
     );
     
     const transaction = database.transaction((todoList: Todo[]) => {
@@ -52,7 +54,8 @@ export class TodoManager {
         const result = stmt.run(
           todo.title,
           todo.status || 'pending',
-          todo.priority || 'medium'
+          todo.priority || 'medium',
+          todo.agent || null
         );
         results.push(result.lastInsertRowid);
       }
@@ -77,7 +80,7 @@ export class TodoManager {
     const updates: string[] = [];
     const values: any[] = [];
     
-    const allowedFields = ['title', 'status', 'priority'];
+    const allowedFields = ['title', 'status', 'priority', 'agent'];
     
     for (const field of allowedFields) {
       if (params[field] !== undefined) {
@@ -126,7 +129,7 @@ export class TodoManager {
     };
   }
 
-  async listTodos(filters: { status?: string; priority?: string } = {}) {
+  async listTodos(filters: { status?: string; priority?: string; agent?: string } = {}) {
     const database = this.db.getDb();
     
     let query = 'SELECT * FROM todos WHERE 1=1';
@@ -140,6 +143,11 @@ export class TodoManager {
     if (filters.priority) {
       query += ' AND priority = ?';
       params.push(filters.priority);
+    }
+    
+    if (filters.agent) {
+      query += ' AND agent = ?';
+      params.push(filters.agent);
     }
     
     query += ' ORDER BY CASE priority WHEN \'high\' THEN 1 WHEN \'medium\' THEN 2 WHEN \'low\' THEN 3 END, created_at DESC';
