@@ -135,7 +135,6 @@ export class LearningMCPServer {
           properties: {
             id: { type: 'number', description: '任务ID' },
             title: { type: 'string', description: '新标题' },
-            description: { type: 'string', description: '新描述' },
             status: { 
               type: 'string',
               enum: ['pending', 'in_progress', 'completed', 'archived'],
@@ -146,7 +145,6 @@ export class LearningMCPServer {
               enum: ['high', 'medium', 'low'],
               description: '优先级'
             },
-            progress: { type: 'number', description: '进度百分比 (0-100)' },
           },
           required: ['id'],
         },
@@ -158,7 +156,6 @@ export class LearningMCPServer {
           type: 'object',
           properties: {
             status: { type: 'string', description: '筛选状态' },
-            category: { type: 'string', description: '筛选分类' },
             priority: { type: 'string', description: '筛选优先级' },
           },
         },

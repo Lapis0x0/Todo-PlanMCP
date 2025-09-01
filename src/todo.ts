@@ -3,12 +3,8 @@ import { DatabaseManager } from './database.js';
 export interface Todo {
   id?: number;
   title: string;
-  description?: string;
   status?: string;
   priority?: string;
-  category?: string;
-  progress?: number;
-  due_date?: string;
   created_at?: string;
   updated_at?: string;
 }
@@ -20,15 +16,14 @@ export class TodoManager {
     const database = this.db.getDb();
     
     const stmt = database.prepare(
-      `INSERT INTO todos (title, status, priority, progress)
-       VALUES (?, ?, ?, ?)`
+      `INSERT INTO todos (title, status, priority)
+       VALUES (?, ?, ?)`
     );
     
     const result = stmt.run(
       todo.title,
       todo.status || 'pending',
-      todo.priority || 'medium',
-      todo.progress || 0
+      todo.priority || 'medium'
     );
 
     const newTodo = database.prepare('SELECT * FROM todos WHERE id = ?').get(result.lastInsertRowid) as any;
@@ -47,8 +42,8 @@ export class TodoManager {
     const database = this.db.getDb();
     
     const stmt = database.prepare(
-      `INSERT INTO todos (title, status, priority, progress)
-       VALUES (?, ?, ?, ?)`
+      `INSERT INTO todos (title, status, priority)
+       VALUES (?, ?, ?)`
     );
     
     const transaction = database.transaction((todoList: Todo[]) => {
@@ -57,8 +52,7 @@ export class TodoManager {
         const result = stmt.run(
           todo.title,
           todo.status || 'pending',
-          todo.priority || 'medium',
-          todo.progress || 0
+          todo.priority || 'medium'
         );
         results.push(result.lastInsertRowid);
       }
@@ -83,7 +77,7 @@ export class TodoManager {
     const updates: string[] = [];
     const values: any[] = [];
     
-    const allowedFields = ['title', 'status', 'priority', 'progress'];
+    const allowedFields = ['title', 'status', 'priority'];
     
     for (const field of allowedFields) {
       if (params[field] !== undefined) {
@@ -126,13 +120,13 @@ export class TodoManager {
       content: [
         {
           type: 'text',
-          text: `✅ 任务已更新：\n\n**${updatedTodo.title}**\n- ID: ${updatedTodo.id}\n- 优先级: ${updatedTodo.priority}\n- 状态: ${updatedTodo.status}\n- 进度: ${updatedTodo.progress}%`,
+          text: `✅ 任务已更新：\n\n**${updatedTodo.title}**\n- ID: ${updatedTodo.id}\n- 优先级: ${updatedTodo.priority}\n- 状态: ${updatedTodo.status}`,
         },
       ],
     };
   }
 
-  async listTodos(filters: { status?: string; category?: string; priority?: string } = {}) {
+  async listTodos(filters: { status?: string; priority?: string } = {}) {
     const database = this.db.getDb();
     
     let query = 'SELECT * FROM todos WHERE 1=1';
@@ -141,11 +135,6 @@ export class TodoManager {
     if (filters.status) {
       query += ' AND status = ?';
       params.push(filters.status);
-    }
-    
-    if (filters.category) {
-      query += ' AND category = ?';
-      params.push(filters.category);
     }
     
     if (filters.priority) {
@@ -228,11 +217,6 @@ export class TodoManager {
     
     formatted += `- **状态**: ${todo.status}\n`;
     formatted += `- **优先级**: ${todo.priority}\n`;
-    
-    if (todo.progress > 0) {
-      formatted += `- **进度**: ${todo.progress}%\n`;
-    }
-    
     formatted += `- **创建时间**: ${todo.created_at}\n\n---\n\n`;
     
     return formatted;

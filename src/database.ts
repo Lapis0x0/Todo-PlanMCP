@@ -29,6 +29,8 @@ export class DatabaseManager {
 
     // 创建表
     this.createTables();
+    // 迁移旧表结构：移除冗余列 description, category, due_date
+    this.migrateSchema();
   }
 
   private createTables() {
@@ -39,17 +41,52 @@ export class DatabaseManager {
       CREATE TABLE IF NOT EXISTS todos (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         title TEXT NOT NULL,
-        description TEXT,
         status TEXT DEFAULT 'pending',
         priority TEXT DEFAULT 'medium',
-        category TEXT,
-        progress INTEGER DEFAULT 0,
-        due_date TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )
     `);
 
+  }
+
+  private migrateSchema() {
+    if (!this.db) throw new Error('Database not initialized');
+    // 检查当前列信息
+    const columns = this.db.prepare("PRAGMA table_info('todos')").all() as Array<{ name: string }>;
+    const hasDescription = columns.some(c => c.name === 'description');
+    const hasCategory = columns.some(c => c.name === 'category');
+    const hasDueDate = columns.some(c => c.name === 'due_date');
+    const hasProgress = columns.some(c => c.name === 'progress');
+    const needsMigration = hasDescription || hasCategory || hasDueDate || hasProgress;
+
+    if (!needsMigration) return;
+
+    const tx = (this.db as Database.Database).transaction(() => {
+      // 建立新表（目标结构）
+      this.db!.exec(`
+        CREATE TABLE IF NOT EXISTS todos_new (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          title TEXT NOT NULL,
+          status TEXT DEFAULT 'pending',
+          priority TEXT DEFAULT 'medium',
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+
+      // 迁移数据（仅拷贝保留列）
+      this.db!.exec(`
+        INSERT INTO todos_new (id, title, status, priority, created_at, updated_at)
+        SELECT id, title, status, priority, created_at, updated_at FROM todos
+      `);
+
+      // 替换旧表
+      this.db!.exec('DROP TABLE todos');
+      this.db!.exec('ALTER TABLE todos_new RENAME TO todos');
+    });
+
+    tx();
   }
 
   getDb(): Database.Database {
