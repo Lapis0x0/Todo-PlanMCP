@@ -167,73 +167,6 @@ export class LearningMCPServer {
           required: ['id'],
         },
       },
-      {
-        name: 'note_create',
-        description: '创建新笔记',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            title: { type: 'string', description: '笔记标题' },
-            content: { type: 'string', description: '笔记内容（支持Markdown）' },
-            category: { type: 'string', description: '分类' },
-            tags: { 
-              type: 'array',
-              items: { type: 'string' },
-              description: '标签列表'
-            },
-            todo_id: { type: 'number', description: '关联的任务ID' },
-          },
-          required: ['title', 'content'],
-        },
-      },
-      {
-        name: 'note_update',
-        description: '更新笔记内容',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            id: { type: 'number', description: '笔记ID' },
-            title: { type: 'string', description: '新标题' },
-            content: { type: 'string', description: '新内容' },
-            append: { type: 'boolean', description: '是否追加到现有内容' },
-          },
-          required: ['id'],
-        },
-      },
-      {
-        name: 'note_list',
-        description: '列出笔记',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            category: { type: 'string', description: '筛选分类' },
-            tag: { type: 'string', description: '筛选标签' },
-            todo_id: { type: 'number', description: '筛选关联的任务' },
-          },
-        },
-      },
-      {
-        name: 'note_search',
-        description: '搜索笔记内容',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            query: { type: 'string', description: '搜索关键词' },
-          },
-          required: ['query'],
-        },
-      },
-      {
-        name: 'summary_generate',
-        description: '生成学习总结',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            category: { type: 'string', description: '学习分类' },
-            period: { type: 'string', description: '时间范围（如：today, week, month）' },
-          },
-        },
-      },
     ];
   }
 
@@ -297,8 +230,6 @@ export class LearningMCPServer {
           return await this.todoManager.listTodos({});
         case 'todo_delete':
           return await this.todoManager.deleteTodo(args.id);
-        case 'summary_generate':
-          return await this.generateSummary(args);
         default:
           throw new Error(`Unknown tool: ${name}`);
       }
@@ -408,24 +339,6 @@ ${todos.content[0].text}
     }
   }
 
-  private async generateSummary(args: { category?: string; period?: string }) {
-    const todos = await this.todoManager.listTodos({});
-    
-    let summary = `# 学习总结\n\n`;
-    if (args.period) {
-      summary += `**时间范围**: ${args.period}\n`;
-    }
-    summary += `\n## 任务完成情况\n\n${todos.content[0].text}`;
-
-    return {
-      content: [
-        {
-          type: 'text',
-          text: summary,
-        },
-      ],
-    };
-  }
 
   async start() {
     await this.db.initialize();
