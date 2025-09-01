@@ -396,6 +396,16 @@ ${todos.content[0].text}
       app.post('/', authenticate, async (req, res) => {
         try {
           const { id, method, params } = req.body || {};
+          // 先处理所有通知（如 notifications/initialized），避免进入 switch
+          if (typeof method === 'string' && method.startsWith('notifications/')) {
+            if (id === undefined || id === null) {
+              return res.status(204).send(); // 纯通知：无响应体
+            }
+            return res.json({ jsonrpc: '2.0', id, result: null }); // 若错误带了 id，则返回空结果
+          }
+          if (typeof method === 'undefined') {
+            return res.status(204).send(); // 无 method，按通知忽略
+          }
           switch (method) {
             case 'initialize': {
               // MCP 客户端握手初始化
