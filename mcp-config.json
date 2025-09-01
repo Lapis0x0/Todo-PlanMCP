@@ -2,10 +2,7 @@
   "mcpServers": {
     "learning-manager": {
       "command": "node",
-      "args": ["/Users/shizhiyun/Documents/Git/Todo&PlanMCP/dist/index.js"],
-      "env": {
-        "NODE_ENV": "production"
-      }
+      "args": ["/Users/shizhiyun/Documents/Git/Todo&PlanMCP/dist/index.js"]
     }
   }
 }

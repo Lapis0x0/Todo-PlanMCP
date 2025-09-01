@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
+import express from 'express';
+import cors from 'cors';
 import {
   CallToolRequestSchema,
   ListResourcesRequestSchema,
@@ -18,8 +19,6 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import { DatabaseManager } from './database.js';
 import { TodoManager } from './todo.js';
-import express, { Request, Response } from 'express';
-import cors from 'cors';
 
 export class LearningMCPServer {
   private server: Server;
@@ -322,7 +321,7 @@ export class LearningMCPServer {
               role: 'user' as const,
               content: {
                 type: 'text' as const,
-                text: `请为我制定一个关于"${args.subject}"的学习计划${args.duration ? `，学习周期为${args.duration}` : ''}。请包括：
+                text: `请为我制定一个关于"${args.topic}"的学习计划${args.duration ? `，学习周期为${args.duration}` : ''}。请包括：
 1. 学习目标
 2. 阶段划分
 3. 每个阶段的重点内容
@@ -369,129 +368,85 @@ ${todos.content[0].text}
 
   async start() {
     await this.db.initialize();
-    
-    // 检查是否在 Docker 环境中运行（通过端口环境变量判断）
-    const port = process.env.PORT || process.env.MCP_PORT || 3000;
+
+    const port = Number(process.env.PORT || process.env.MCP_PORT || 3000);
+    const host = process.env.MCP_HOST || '0.0.0.0';
     const isHttpMode = process.env.NODE_ENV === 'production' || process.env.MCP_HTTP_MODE === 'true';
-    
+
     if (isHttpMode) {
-      // HTTP API 模式 - 用于远程连接
       const app = express();
       app.use(cors());
       app.use(express.json());
-      
+
+      // 健康检查端点（无需认证）
+      app.get('/health', (_req, res) => {
+        res.json({ status: 'ok', server: 'learning-mcp-server' });
+      });
+
       // 认证中间件
-      const authenticate = (req: Request, res: Response, next: any) => {
-        const authHeader = req.headers['x-mcp-auth'] || req.headers['X-MCP-Auth'];
-        if (authHeader !== this.authToken) {
+      const authenticate: express.RequestHandler = (req, res, next) => {
+        const token = (req.headers['x-mcp-auth'] || req.headers['X-MCP-Auth']) as string | undefined;
+        if (token !== this.authToken) {
           return res.status(401).json({ error: '认证失败：请在请求头中添加正确的 X-MCP-Auth 令牌' });
         }
         next();
       };
-      
-      // 健康检查端点
-      app.get('/health', (req: Request, res: Response) => {
-        res.json({ status: 'ok', server: 'learning-mcp-server' });
-      });
-      
-      // MCP 协议根端点 - 处理所有 MCP 请求
-      app.post('/', authenticate, async (req: Request, res: Response) => {
+
+      // MCP JSON-RPC 2.0 根端点
+      app.post('/', authenticate, async (req, res) => {
         try {
-          const { method, params } = req.body;
-          
+          const { id, method, params } = req.body || {};
           switch (method) {
             case 'tools/list':
-              res.json({
-                jsonrpc: '2.0',
-                id: req.body.id,
-                result: { tools: this.getTools() }
-              });
-              break;
-              
-            case 'tools/call':
-              const result = await this.callTool(params.name, params.arguments || {}, req.headers as Record<string, string>);
-              res.json({
-                jsonrpc: '2.0',
-                id: req.body.id,
-                result
-              });
-              break;
-              
-            case 'resources/list':
-              res.json({
-                jsonrpc: '2.0',
-                id: req.body.id,
-                result: { resources: await this.getResources() }
-              });
-              break;
-              
+              return res.json({ jsonrpc: '2.0', id, result: { tools: this.getTools() } });
+            case 'tools/call': {
+              const result = await this.callTool(params?.name, params?.arguments || {}, req.headers as any);
+              return res.json({ jsonrpc: '2.0', id, result });
+            }
+            case 'resources/list': {
+              const resources = await this.getResources();
+              return res.json({ jsonrpc: '2.0', id, result: { resources } });
+            }
+            case 'resources/read': {
+              const result = await this.handleResourceRead(params?.uri);
+              return res.json({ jsonrpc: '2.0', id, result });
+            }
             case 'prompts/list':
-              res.json({
-                jsonrpc: '2.0',
-                id: req.body.id,
-                result: { prompts: this.getPrompts() }
-              });
-              break;
-              
+              return res.json({ jsonrpc: '2.0', id, result: { prompts: this.getPrompts() } });
+            case 'prompts/get': {
+              const result = await this.handlePromptRequest(params?.name, params?.arguments || {});
+              return res.json({ jsonrpc: '2.0', id, result });
+            }
             default:
-              res.status(400).json({
-                jsonrpc: '2.0',
-                id: req.body.id,
-                error: { code: -32601, message: `Method not found: ${method}` }
-              });
+              return res.status(400).json({ jsonrpc: '2.0', id, error: { code: -32601, message: `Unknown method: ${method}` } });
           }
-        } catch (error) {
-          res.status(500).json({
-            jsonrpc: '2.0',
-            id: req.body.id,
-            error: { code: -32603, message: error instanceof Error ? error.message : String(error) }
-          });
+        } catch (err) {
+          return res.status(500).json({ jsonrpc: '2.0', error: { code: -32603, message: (err as Error).message } });
         }
       });
-      
-      // 兼容性端点 - 自定义 HTTP API
-      app.post('/tools/:toolName', authenticate, async (req: Request, res: Response) => {
-        try {
-          const result = await this.callTool(req.params.toolName, req.body, req.headers as Record<string, string>);
-          res.json(result);
-        } catch (error) {
-          res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
-        }
-      });
-      
-      // 获取工具列表
-      app.get('/tools', authenticate, (req: Request, res: Response) => {
-        res.json({ tools: this.getTools() });
-      });
-      
-      app.listen(port, () => {
-        // 显示认证令牌信息
+
+      app.listen(port, host, () => {
         if (process.env.MCP_AUTH_TOKEN) {
           console.error('🔐 使用自定义认证令牌');
         } else {
           console.error('🔐 使用默认认证令牌: mcp-learning-2025');
           console.error('💡 建议设置环境变量 MCP_AUTH_TOKEN 使用自定义令牌');
         }
-        
-        console.error(`🚀 Learning MCP Server started with authentication on port ${port}`);
-        console.error(`🌐 Health check: http://localhost:${port}/health`);
-        console.error(`🔧 Tools API: http://localhost:${port}/tools`);
+        console.error(`🚀 HTTP 模式已启动: http://${host}:${port}`);
       });
-    } else {
-      // Stdio 模式 - 用于本地连接
-      const transport = new StdioServerTransport();
-      await this.server.connect(transport);
-      
-      // 显示认证令牌信息
-      if (process.env.MCP_AUTH_TOKEN) {
-        console.error('🔐 使用自定义认证令牌');
-      } else {
-        console.error('🔐 使用默认认证令牌: mcp-learning-2025');
-        console.error('💡 建议设置环境变量 MCP_AUTH_TOKEN 使用自定义令牌');
-      }
-      
-      console.error('🚀 Learning MCP Server started with authentication (stdio mode)');
+      return;
     }
+
+    // 本地 CLI/STDIO 模式
+    const transport = new StdioServerTransport();
+    await this.server.connect(transport);
+    if (process.env.MCP_AUTH_TOKEN) {
+      console.error('🔐 使用自定义认证令牌');
+    } else {
+      console.error('🔐 使用默认认证令牌: mcp-learning-2025');
+      console.error('💡 建议设置环境变量 MCP_AUTH_TOKEN 使用自定义令牌');
+    }
+    console.error('🚀 Learning MCP Server started (STDIO mode)');
   }
 }
 

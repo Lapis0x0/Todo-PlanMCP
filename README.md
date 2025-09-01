@@ -116,10 +116,7 @@
   "mcpServers": {
     "todo-plan-manager": {
       "command": "node",
-      "args": ["/path/to/your/Todo&PlanMCP/dist/index.js"], // 请使用绝对路径
-      "env": {
-        "NODE_ENV": "production"
-      }
+      "args": ["/path/to/your/Todo&PlanMCP/dist/index.js"] // 请使用绝对路径（本地以 STDIO 模式运行，不要设置 NODE_ENV=production）
     }
   }
 }
@@ -140,6 +137,10 @@
   }
 }
 ```
+
+> 提示：
+> - 本地（STDIO 模式）请勿设置 `NODE_ENV=production` 或 `MCP_HTTP_MODE=true`，否则会改为 HTTP 模式，导致本地客户端无法通过 STDIO 连接。
+> - 远程（HTTP 模式）请确保服务端已暴露 3000 端口，并在客户端正确设置 `X-MCP-Auth` 头部。
 
 #### 远程客户端 (手机 App)
 
