@@ -72,15 +72,18 @@
     version: '3.8'
     services:
       todo-plan-mcp:
-        image: ghcr.io/你的GitHub用户名/todo-planmcp:latest # 使用您自己的镜像地址
+        image: ghcr.io/lapis0x0/todo-planmcp:latest
         container_name: todo-plan-mcp
         restart: unless-stopped
         ports:
-          - "3000:3000"
+          - "3002:3000"
         environment:
-          - MCP_AUTH_TOKEN=your-secret-token # 设置您的认证令牌
+          MCP_AUTH_TOKEN: "your token"
+          NODE_ENV: "production"   # 显式启用 HTTP 模式（也可改用 MCP_HTTP_MODE=true）
+          MCP_HOST: "0.0.0.0"
+          MCP_PORT: "3000"
         volumes:
-          - ./data:/app/data # 持久化数据
+          - ./data:/app/data
     EOF
 
     # 2. 启动服务
@@ -129,10 +132,8 @@
   "mcpServers": {
     "todo-plan-manager": {
       "type": "streamableHttp",
-      "url": "http://your-vps-ip:3000",
-      "headers": {
-        "X-MCP-Auth": "your-secret-token"
-      }
+      "url": "http://你的服务器:3002",
+      "headers": { "X-MCP-Auth": "your token" }
     }
   }
 }

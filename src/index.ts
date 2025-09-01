@@ -399,12 +399,15 @@ ${todos.content[0].text}
           switch (method) {
             case 'initialize': {
               // MCP 客户端握手初始化
+              const clientProtocol = params?.protocolVersion;
+              const protocolVersion = typeof clientProtocol === 'string' && clientProtocol.trim() !== ''
+                ? clientProtocol
+                : '1.0'; // 兼容常见客户端期望的版本，如不提供则回退到 1.0
               return res.json({
                 jsonrpc: '2.0',
                 id,
                 result: {
-                  // 协议版本：使用 SDK 主版本作为简化标识，足以满足大多数客户端握手检查
-                  protocolVersion: '0.6',
+                  protocolVersion,
                   serverInfo: { name: 'learning-mcp-server', version: '1.0.0' },
                   capabilities: { tools: {}, resources: {}, prompts: {} },
                 },
