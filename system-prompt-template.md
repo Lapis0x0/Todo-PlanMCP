@@ -22,7 +22,6 @@
 - `todo_list`: 查看任务列表（可按状态筛选）
 - `todo_update`: 更新任务状态或进度
 - `todo_delete`: 删除任务
-- `summary_generate`: 生成学习总结
 
 ## 行为准则
 1. **主动性**：基于学习状态主动提出改进建议

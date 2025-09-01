@@ -1,45 +1,58 @@
-# Learning MCP Server - 学习管理 MCP 服务器
+# Learning MCP Server
 
-一个基于 MCP (Model Context Protocol) 的学习管理服务器，让 AI Agent 能够自主维护学习任务和笔记。
+一个基于 Model Context Protocol (MCP) 的简洁学习管理服务器，专注于任务管理和学习进度跟踪。
 
-## 功能特性
+## 🌟 功能特性
 
-### 📋 任务管理
-- **添加任务** (`todo_add`): 创建新的学习任务，支持设置优先级、分类、截止日期
-- **更新任务** (`todo_update`): 修改任务状态、进度、内容等
-- **查看任务** (`todo_list`): 按状态、分类、优先级筛选查看任务
-- **删除任务** (`todo_delete`): 删除不需要的任务
+- ✅ **任务管理**：创建、更新、删除学习任务
+- ✅ **批量操作**：一次性添加多个任务
+- ✅ **进度跟踪**：任务状态和完成进度管理
+- ✅ **优先级管理**：高/中/低优先级分类
+- ✅ **持久化存储**：SQLite 数据库本地存储
+- ✅ **跨平台支持**：本地运行 + 远程部署
 
-### 📚 笔记管理
-- **创建笔记** (`note_create`): 创建学习笔记，支持 Markdown 格式、标签、关联任务
-- **更新笔记** (`note_update`): 修改或追加笔记内容
-- **查看笔记** (`note_list`): 按分类、标签筛选笔记
-- **搜索笔记** (`note_search`): 全文搜索笔记内容
+## 🚀 快速开始
 
-### 📊 学习总结
-
-## 安装
+### 本地开发
 
 ```bash
-# 克隆仓库
-git clone https://github.com/yourusername/Todo-PlanMCP.git
-cd Todo-PlanMCP
-
-# 安装依赖
+# 1. 安装依赖
 npm install
 
-# 编译 TypeScript
+# 2. 编译项目
 npm run build
+
+# 3. 测试功能
+npx tsx test-final.ts
 ```
 
-## 配置
+## 📱 客户端配置
 
-### Claude Desktop 配置
+### Cherry Studio（本地）
 
-1. 找到 Claude Desktop 的配置文件：
+首先，你需要先克隆这个仓库到本地，然后到仓库目录下运行`npm install`和`npm run build`
+
+然后在 Cherry Studio 的 MCP 配置中添加：
+
+```json
+{
+  "mcpServers": {
+    "learning-manager": {
+      "command": "node",
+      "args": ["/Users/你的用户名/Documents/Git/Todo&PlanMCP/dist/index.js"],
+      "env": {
+        "NODE_ENV": "production"
+      }
+    }
+  }
+}
+```
+
+### Claude Desktop
+
+1. 找到配置文件：
    - macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
    - Windows: `%APPDATA%\Claude\claude_desktop_config.json`
-   - Linux: `~/.config/Claude/claude_desktop_config.json`
 
 2. 添加服务器配置：
 
@@ -57,60 +70,119 @@ npm run build
 }
 ```
 
-3. 重启 Claude Desktop 应用
+## 🐳 Docker 部署
 
-### 其他 MCP 客户端配置
+### 自动化部署流程
 
-参考 `mcp-config.json` 文件中的示例配置。
+1. **推送代码到 GitHub** → GitHub Actions 自动构建 Docker 镜像
+2. **VPS 拉取镜像** → 运行容器提供远程访问
 
-## 使用示例
-
-### 创建学习任务
-```
-使用 todo_add 工具创建一个学习深度学习的任务，优先级高，分类为"深度学习"
-```
-
-### 添加学习笔记
-```
-使用 note_create 工具创建一个关于卷积神经网络的笔记，标签包括"CNN"、"计算机视觉"
-```
-
-### 查看当前进度
-```
-使用 todo_list 工具查看所有进行中的任务
-```
-
-### 搜索知识点
-```
-使用 note_search 工具搜索"反向传播"相关的笔记
-```
-
-### 生成学习计划
-```
-使用 learning_plan prompt 为我制定一个学习量化交易的计划
-```
-
-## 数据存储
-
-所有数据存储在本地 SQLite 数据库中：
-- 位置：`data/learning.db`
-- 包含：任务、笔记、标签、学习记录等表
-
-## 开发模式
+### VPS 部署
 
 ```bash
-npm run dev
+# 拉取最新镜像
+docker pull ghcr.io/你的GitHub用户名/todo-planmcp:latest
+
+# 运行容器
+docker run -d \
+  --name learning-mcp \
+  --restart unless-stopped \
+  -p 3000:3000 \
+  -v /opt/learning-mcp/data:/app/data \
+  ghcr.io/你的GitHub用户名/todo-planmcp:latest
 ```
 
-使用 tsx 监听文件变化，自动重新加载。
+### 手机客户端配置
 
-## 技术栈
+连接远程服务器：
 
-- TypeScript
-- MCP SDK
-- SQLite (数据存储)
-- Marked (Markdown 解析)
+```json
+{
+  "mcpServers": {
+    "learning-manager": {
+      "type": "sse",
+      "url": "http://你的VPS-IP:3000"
+    }
+  }
+}
+```
 
-## 许可证
+## 🛠️ 可用工具
 
-MIT
+| 工具 | 描述 | 参数 |
+|------|------|------|
+| `todo_add` | 添加单个任务 | `title`, `priority` |
+| `todo_add_batch` | 批量添加任务 | `todos[]` |
+| `todo_list` | 查看任务列表 | `status?` |
+| `todo_update` | 更新任务 | `id`, `status?`, `progress?` |
+| `todo_delete` | 删除任务 | `id` |
+| `summary_generate` | 生成学习总结 | `period?` |
+
+## 📋 使用示例
+
+### 基础任务管理
+```
+# 添加单个任务
+请使用 todo_add 工具创建一个"学习 React Hooks"的高优先级任务
+
+# 批量添加任务
+请使用 todo_add_batch 工具批量创建以下任务：
+- 学习 TypeScript 基础
+- 练习算法题
+- 阅读设计模式
+
+# 查看任务列表
+请调用 todo_list 工具显示我当前的学习任务
+
+# 更新任务进度
+请使用 todo_update 工具将任务1的状态改为"进行中"，进度设为30%
+```
+
+### Agent 对话开始模板
+```
+Agent: 让我先了解一下你当前的学习任务...
+[调用 todo_list 工具]
+Agent: 我看到你目前有3个进行中的任务，建议我们先完成...
+```
+
+## 🗂️ 项目结构
+
+```
+├── src/
+│   ├── index.ts      # MCP 服务器主文件
+│   ├── database.ts   # 数据库管理
+│   └── todo.ts       # 任务管理
+├── .github/workflows/
+│   └── docker-build.yml  # GitHub Actions 自动构建
+├── deploy/
+│   └── vps-setup.md      # VPS 部署指南
+├── Dockerfile            # Docker 镜像构建
+├── docker-compose.yml    # 本地 Docker 测试
+└── system-prompt-template.md  # Agent 系统提示词模板
+```
+
+## 🔄 部署选项
+
+### 本地运行
+- ✅ **桌面客户端**：Cherry Studio、Claude Desktop
+- ✅ **即时响应**：本地进程，无网络延迟
+- ✅ **数据私密**：所有数据存储在本地
+
+### 远程部署
+- ✅ **全球访问**：手机、平板等移动设备
+- ✅ **数据同步**：多设备共享学习进度
+- ✅ **自动化部署**：GitHub Actions + Docker
+
+## 📚 相关文档
+
+- [VPS 部署指南](deploy/vps-setup.md)
+- [Agent 系统提示词模板](system-prompt-template.md)
+- [Cherry Studio 配置示例](cherry-studio-config.json)
+
+## 🤝 贡献
+
+欢迎提交 Issue 和 Pull Request！
+
+## 📄 许可证
+
+MIT License
