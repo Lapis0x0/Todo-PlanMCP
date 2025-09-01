@@ -397,6 +397,22 @@ ${todos.content[0].text}
         try {
           const { id, method, params } = req.body || {};
           switch (method) {
+            case 'initialize': {
+              // MCP 客户端握手初始化
+              return res.json({
+                jsonrpc: '2.0',
+                id,
+                result: {
+                  // 协议版本：使用 SDK 主版本作为简化标识，足以满足大多数客户端握手检查
+                  protocolVersion: '0.6',
+                  serverInfo: { name: 'learning-mcp-server', version: '1.0.0' },
+                  capabilities: { tools: {}, resources: {}, prompts: {} },
+                },
+              });
+            }
+            case 'ping': {
+              return res.json({ jsonrpc: '2.0', id, result: { ok: true } });
+            }
             case 'tools/list':
               return res.json({ jsonrpc: '2.0', id, result: { tools: this.getTools() } });
             case 'tools/call': {
