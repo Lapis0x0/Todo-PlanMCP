@@ -48,50 +48,6 @@ export class DatabaseManager {
       )
     `);
 
-    // 创建笔记表
-    this.db.exec(`
-      CREATE TABLE IF NOT EXISTS notes (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        title TEXT NOT NULL,
-        content TEXT NOT NULL,
-        category TEXT,
-        todo_id INTEGER,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (todo_id) REFERENCES todos(id) ON DELETE SET NULL
-      )
-    `);
-
-    // 创建标签表
-    this.db.exec(`
-      CREATE TABLE IF NOT EXISTS tags (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT UNIQUE NOT NULL
-      )
-    `);
-
-    // 创建笔记-标签关联表
-    this.db.exec(`
-      CREATE TABLE IF NOT EXISTS note_tags (
-        note_id INTEGER,
-        tag_id INTEGER,
-        PRIMARY KEY (note_id, tag_id),
-        FOREIGN KEY (note_id) REFERENCES notes(id) ON DELETE CASCADE,
-        FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
-      )
-    `);
-
-    // 创建学习记录表
-    this.db.exec(`
-      CREATE TABLE IF NOT EXISTS learning_records (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        category TEXT,
-        duration INTEGER,
-        summary TEXT,
-        date DATE DEFAULT CURRENT_DATE,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
   }
 
   getDb(): Database.Database {

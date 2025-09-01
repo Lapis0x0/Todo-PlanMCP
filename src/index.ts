@@ -17,13 +17,11 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import { DatabaseManager } from './database.js';
 import { TodoManager } from './todo.js';
-import { NoteManager } from './notes.js';
 
 export class LearningMCPServer {
   private server: Server;
   private db: DatabaseManager;
   private todoManager: TodoManager;
-  private noteManager: NoteManager;
 
   constructor() {
     this.server = new Server(
@@ -42,7 +40,6 @@ export class LearningMCPServer {
 
     this.db = new DatabaseManager();
     this.todoManager = new TodoManager(this.db);
-    this.noteManager = new NoteManager(this.db);
 
     this.setupHandlers();
   }
@@ -251,16 +248,6 @@ export class LearningMCPServer {
       mimeType: 'text/markdown',
     });
 
-    // 添加笔记资源
-    const categories = await this.noteManager.getCategories();
-    for (const category of categories) {
-      resources.push({
-        uri: `notes://category/${category}`,
-        name: `${category} 笔记`,
-        description: `查看 ${category} 分类下的所有笔记`,
-        mimeType: 'text/markdown',
-      });
-    }
 
     return resources;
   }
@@ -272,13 +259,13 @@ export class LearningMCPServer {
         description: '生成学习计划',
         arguments: [
           {
-            name: 'subject',
+            name: 'topic',
             description: '学习主题',
             required: true,
           },
           {
             name: 'duration',
-            description: '学习周期（如：1周、1个月）',
+            description: '学习时长（小时）',
             required: false,
           },
         ],
@@ -310,14 +297,6 @@ export class LearningMCPServer {
           return await this.todoManager.listTodos({});
         case 'todo_delete':
           return await this.todoManager.deleteTodo(args.id);
-        case 'note_create':
-          return await this.noteManager.createNote(args);
-        case 'note_update':
-          return await this.noteManager.updateNote(args);
-        case 'note_list':
-          return await this.noteManager.listNotes(args);
-        case 'note_search':
-          return await this.noteManager.searchNotes(args.query);
         case 'summary_generate':
           return await this.generateSummary(args);
         default:
@@ -350,21 +329,18 @@ export class LearningMCPServer {
           ],
         };
       }
-
-      if (uri.startsWith('notes://category/')) {
-        const category = uri.replace('notes://category/', '');
-        const notes = await this.noteManager.listNotes({ category });
+      if (uri === 'todo://completed') {
+        const todos = await this.todoManager.listTodos({ status: 'completed' });
         return {
           contents: [
             {
               uri,
               mimeType: 'text/markdown',
-              text: notes.content[0].text,
+              text: todos.content[0].text,
             },
           ],
         };
       }
-
       throw new Error(`Unknown resource: ${uri}`);
     } catch (error) {
       return {
@@ -402,8 +378,7 @@ export class LearningMCPServer {
         };
       
       case 'review_progress':
-        const todos = await this.todoManager.listTodos(args.category ? { category: args.category } : {});
-        const notes = await this.noteManager.listNotes(args.category ? { category: args.category } : {});
+        const todos = await this.todoManager.listTodos({});
         
         return {
           messages: [
@@ -411,13 +386,10 @@ export class LearningMCPServer {
               role: 'user' as const,
               content: {
                 type: 'text' as const,
-                text: `请帮我回顾${args.category ? `"${args.category}"的` : ''}学习进度：
+                text: `请帮我回顾学习进度：
 
 当前任务状态：
 ${todos.content[0].text}
-
-已有笔记：
-${notes.content[0].text}
 
 请分析：
 1. 已完成的内容
@@ -430,24 +402,20 @@ ${notes.content[0].text}
           ],
         };
       
+      
       default:
         throw new Error(`Unknown prompt: ${name}`);
     }
   }
 
   private async generateSummary(args: { category?: string; period?: string }) {
-    const todos = await this.todoManager.listTodos(args.category ? { category: args.category } : {});
-    const notes = await this.noteManager.listNotes(args.category ? { category: args.category } : {});
+    const todos = await this.todoManager.listTodos({});
     
     let summary = `# 学习总结\n\n`;
-    if (args.category) {
-      summary += `**分类**: ${args.category}\n`;
-    }
     if (args.period) {
       summary += `**时间范围**: ${args.period}\n`;
     }
-    summary += `\n## 任务完成情况\n\n${todos.content[0].text}\n\n`;
-    summary += `## 学习笔记\n\n${notes.content[0].text}`;
+    summary += `\n## 任务完成情况\n\n${todos.content[0].text}`;
 
     return {
       content: [

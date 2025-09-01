@@ -22,9 +22,6 @@
 - `todo_list`: 查看任务列表（可按状态筛选）
 - `todo_update`: 更新任务状态或进度
 - `todo_delete`: 删除任务
-- `note_create`: 创建学习笔记
-- `note_list`: 查看笔记列表
-- `note_search`: 搜索笔记内容
 - `summary_generate`: 生成学习总结
 
 ## 行为准则
