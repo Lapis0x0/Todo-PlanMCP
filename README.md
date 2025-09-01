@@ -48,47 +48,143 @@
     git push origin main
     ```
 3.  **检查构建**: 在仓库的 `Actions` 标签页下，您可以看到 `Build and Push Docker Image` 工作流的运行状态。
-4.  **部署镜像**: 构建成功后，镜像会发布到 `ghcr.io/你的GitHub用户名/todo-planmcp:latest`。您可以使用此镜像在任何支持 Docker 的服务器上进行部署。
+4.  **部署镜像**: 构建成功后，镜像会发布到 `ghcr.io/你的GitHub用户名/todo-planmcp`。我们推荐使用 `:main` 标签，因为它总是对应 `main` 分支的最新代码。 `:latest` 标签仅在特定条件下更新，可能不是最新的。
 
 #### 部署方式二：手动部署到 VPS
 
 您也可以在自己的 VPS 上手动部署服务。
 
-1.  **准备环境**: 确保您的服务器已安装 Docker。
+1.  **准备环境**: 确保您的服务器已安装 Docker 和 Docker Compose。
     ```bash
     # 安装 Docker
     curl -fsSL https://get.docker.com -o get-docker.sh
     sudo sh get-docker.sh
+    # 安装 Docker Compose
+    sudo apt-get update && sudo apt-get install -y docker-compose-plugin
     ```
 
-2.  **部署服务**:
+2.  **创建 `docker-compose.yml`**:
+    在您的服务器上创建一个目录，并在其中创建 `docker-compose.yml` 文件。
     ```bash
-    # 1. 创建目录
-    mkdir Todo-Plan-MCP
-    cd Todo-Plan-MCP
-    
-    # 2. 创建 docker-compose.yml 文件
-    cat > docker-compose.yml << EOF
+    mkdir -p /opt/todo-plan-mcp && cd /opt/todo-plan-mcp
+    ```
+    ```yaml
+    # docker-compose.yml
     version: '3.8'
     services:
       todo-plan-mcp:
-        image: ghcr.io/lapis0x0/todo-planmcp:latest
+        # 推荐使用 :main 标签来获取最新的稳定构建
+        image: ghcr.io/lapis0x0/todo-planmcp:main
         container_name: todo-plan-mcp
         restart: unless-stopped
         ports:
           - "3002:3000"
         environment:
-          MCP_AUTH_TOKEN: "your token"
-          NODE_ENV: "production"   # 显式启用 HTTP 模式（也可改用 MCP_HTTP_MODE=true）
-          MCP_HOST: "0.0.0.0"
-          MCP_PORT: "3000"
+          # 必须：用于客户端认证的安全令牌
+          - MCP_AUTH_TOKEN=your-secret-token
+          # 可选：确保服务在 HTTP 模式下运行
+          - NODE_ENV=production
+          - MCP_HOST=0.0.0.0
+          - MCP_PORT=3000
         volumes:
+          # 将数据库文件持久化到宿主机
           - ./data:/app/data
-    EOF
-
-    # 2. 启动服务
-    docker-compose up -d
+        healthcheck:
+          # 检查服务是否仍在运行
+          test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+          interval: 1m30s
+          timeout: 10s
+          retries: 3
     ```
+
+3.  **启动服务**:
+    ```bash
+    docker compose up -d
+    ```
+
+4.  **更新服务**:
+    当您想更新到最新版本时，执行以下命令：
+    ```bash
+    # 拉取最新的镜像
+    docker compose pull
+    # 强制重新创建容器以应用更新
+    docker compose up -d --force-recreate
+    ```
+
+### 3. 快速验证
+
+部署后，您可以使用 `curl` 快速检查服务是否正常工作。请将 `your-vps-ip` 和 `your-secret-token` 替换为您的实际值。
+
+1.  **健康检查** (预期 HTTP 200 OK)
+    ```bash
+    curl -i http://your-vps-ip:3002/health
+    ```
+
+2.  **MCP Initialize** (预期返回 JSON-RPC 结果)
+    ```bash
+    curl -i -sS -H 'Content-Type: application/json' \
+      -H 'X-MCP-Auth: your-secret-token' \
+      -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"1.0"}}' \
+      http://your-vps-ip:3002/
+    ```
+
+3.  **MCP Notification** (预期 HTTP 204 No Content)
+    ```bash
+    curl -i -sS -H 'Content-Type: application/json' \
+      -H 'X-MCP-Auth: your-secret-token' \
+      -d '{"jsonrpc":"2.0","method":"notifications/initialized","params":{}}' \
+      http://your-vps-ip:3002/
+    ```
+
+4.  **工具列表** (预期返回 `todo_` 系列工具)
+    ```bash
+    curl -sS -H 'Content-Type: application/json' \
+      -H 'X-MCP-Auth: your-secret-token' \
+      -d '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' \
+      http://your-vps-ip:3002/
+    ```
+
+## ⚙️ 客户端配置 (Cherry Studio)
+
+### 模式一：本地开发 (STDIO)
+
+用于本地开发和调试，客户端直接通过标准输入/输出与 `index.js` 脚本通信。
+
+**配置:**
+```json
+{
+  "mcpServers": {
+    "todo-plan-manager-local": {
+      "command": "node",
+      "args": [
+        "/path/to/your/Todo&PlanMCP/dist/index.js"
+      ],
+      "cwd": "/path/to/your/Todo&PlanMCP"
+    }
+  }
+}
+```
+> **注意**: 请确保使用您项目在本地的 **绝对路径**。此模式下 **不要** 设置 `NODE_ENV=production`，否则服务会切换到 HTTP 模式。
+
+### 模式二：远程连接 (HTTP)
+
+用于连接已部署在服务器上的服务。
+
+**配置:**
+```json
+{
+  "mcpServers": {
+    "todo-plan-manager-remote": {
+      "type": "streamableHttp",
+      "url": "http://your-vps-ip:3002",
+      "headers": {
+        "X-MCP-Auth": "your-secret-token"
+      }
+    }
+  }
+}
+```
+> **注意**: `url` 和 `X-MCP-Auth` 的值必须与您服务器的配置匹配。
 
 ## ⚙️ 配置
 
