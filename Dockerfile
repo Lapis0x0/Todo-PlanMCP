@@ -25,6 +25,7 @@ EXPOSE 3000
 
 # 设置环境变量
 ENV NODE_ENV=production
+ENV MCP_AUTH_TOKEN=your-custom-secret-token
 ENV DATA_PATH=/app/data
 
 # 启动命令

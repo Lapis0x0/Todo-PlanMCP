@@ -22,8 +22,11 @@ export class LearningMCPServer {
   private server: Server;
   private db: DatabaseManager;
   private todoManager: TodoManager;
+  private authToken: string;
 
   constructor() {
+    // 从环境变量读取认证令牌，如果没有则使用默认值
+    this.authToken = process.env.MCP_AUTH_TOKEN || 'mcp-learning-2025';
     this.server = new Server(
       {
         name: 'learning-mcp-server',
@@ -62,7 +65,9 @@ export class LearningMCPServer {
 
     // Handle tool calls
     this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
-      return await this.handleToolCall(request.params.name, request.params.arguments || {});
+      // 从请求中提取 headers（如果支持的话）
+      const headers = (request as any).headers;
+      return await this.callTool(request.params.name, request.params.arguments || {}, headers);
     });
 
     // Handle resource reads
@@ -217,7 +222,26 @@ export class LearningMCPServer {
     ];
   }
 
-  private async handleToolCall(name: string, args: any) {
+  private validateAuth(headers?: Record<string, string>): boolean {
+    if (!headers) return false;
+    
+    const authHeader = headers['x-mcp-auth'] || headers['X-MCP-Auth'];
+    return authHeader === this.authToken;
+  }
+
+  private async callTool(name: string, args: any, headers?: Record<string, string>) {
+    // 验证认证令牌
+    if (!this.validateAuth(headers)) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: '❌ 认证失败：请在请求头中添加正确的 X-MCP-Auth 令牌',
+          },
+        ],
+      };
+    }
+    
     try {
       switch (name) {
         case 'todo_add':
@@ -344,7 +368,16 @@ ${todos.content[0].text}
     await this.db.initialize();
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
-    console.error('Learning MCP Server started');
+    
+    // 显示认证令牌信息
+    if (process.env.MCP_AUTH_TOKEN) {
+      console.error('🔐 使用自定义认证令牌');
+    } else {
+      console.error('🔐 使用默认认证令牌: mcp-learning-2025');
+      console.error('💡 建议设置环境变量 MCP_AUTH_TOKEN 使用自定义令牌');
+    }
+    
+    console.error('🚀 Learning MCP Server started with authentication');
   }
 }
 
