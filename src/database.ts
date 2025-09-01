@@ -49,6 +49,16 @@ export class DatabaseManager {
       )
     `);
 
+    // 创建笔记表（简化字段）
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS notes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        content TEXT NOT NULL,
+        agent TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
   }
 
   private migrateSchema() {
@@ -99,6 +109,70 @@ export class DatabaseManager {
     } else if (!hasAgent) {
       // 无需重建，但缺少 agent 列，直接增加
       this.db.exec("ALTER TABLE todos ADD COLUMN agent TEXT");
+    }
+
+    // --- 笔记表迁移：为兼容老版本，如缺列则增列 ---
+    try {
+      const notesCols = this.db.prepare("PRAGMA table_info('notes')").all() as Array<{ name: string }>;
+      if (Array.isArray(notesCols) && notesCols.length > 0) {
+        const hasNoteAgent = notesCols.some(c => c.name === 'agent');
+        const hasNoteCreated = notesCols.some(c => c.name === 'created_at');
+        const hasNoteUpdated = notesCols.some(c => c.name === 'updated_at');
+        const hasNoteTitle = notesCols.some(c => c.name === 'title');
+        const hasNoteContent = notesCols.some(c => c.name === 'content');
+
+        // 先补缺列，保证后续迁移 SELECT 可引用这些列
+        if (!hasNoteAgent) {
+          this.db.exec("ALTER TABLE notes ADD COLUMN agent TEXT");
+        }
+        if (!hasNoteCreated) {
+          this.db.exec("ALTER TABLE notes ADD COLUMN created_at DATETIME DEFAULT CURRENT_TIMESTAMP");
+        }
+        if (!hasNoteUpdated) {
+          this.db.exec("ALTER TABLE notes ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP");
+        }
+
+        // 若存在旧版 title 列（且可能设置了 NOT NULL），重建为新结构并迁移数据
+        if (hasNoteTitle) {
+          const txNotes = (this.db as Database.Database).transaction(() => {
+            this.db!.exec(`
+              CREATE TABLE IF NOT EXISTS notes_new (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                content TEXT NOT NULL,
+                agent TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+              )
+            `);
+
+            // 选择迁移内容表达式
+            let contentExpr = "''";
+            if (hasNoteContent && hasNoteTitle) {
+              contentExpr = "CASE WHEN content IS NULL OR content='' THEN COALESCE(title, '') ELSE content END";
+            } else if (hasNoteContent) {
+              contentExpr = "COALESCE(content, '')";
+            } else if (hasNoteTitle) {
+              contentExpr = "COALESCE(title, '')";
+            }
+
+            this.db!.exec(`
+              INSERT INTO notes_new (id, content, agent, created_at, updated_at)
+              SELECT id,
+                     ${contentExpr} AS content,
+                     agent,
+                     COALESCE(created_at, CURRENT_TIMESTAMP),
+                     COALESCE(updated_at, CURRENT_TIMESTAMP)
+              FROM notes
+            `);
+
+            this.db!.exec('DROP TABLE notes');
+            this.db!.exec('ALTER TABLE notes_new RENAME TO notes');
+          });
+          txNotes();
+        }
+      }
+    } catch (e) {
+      // 忽略迁移异常，避免影响主流程
     }
   }
 

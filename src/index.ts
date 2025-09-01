@@ -19,11 +19,13 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import { DatabaseManager } from './database.js';
 import { TodoManager } from './todo.js';
+import { NoteManager } from './note.js';
 
 export class LearningMCPServer {
   private server: Server;
   private db: DatabaseManager;
   private todoManager: TodoManager;
+  private noteManager: NoteManager;
   private authToken: string;
 
   constructor() {
@@ -45,6 +47,7 @@ export class LearningMCPServer {
 
     this.db = new DatabaseManager();
     this.todoManager = new TodoManager(this.db);
+    this.noteManager = new NoteManager(this.db);
 
     this.setupHandlers();
   }
@@ -175,6 +178,53 @@ export class LearningMCPServer {
           required: ['id'],
         },
       },
+      // Notes 工具
+      {
+        name: 'note_add',
+        description: '添加一条笔记',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            content: { type: 'string', description: '笔记内容' },
+            agent: { type: 'string', description: 'Agent 标识（可选）' },
+          },
+          required: ['content'],
+        },
+      },
+      {
+        name: 'note_list',
+        description: '列出全部笔记，或按 Agent 过滤',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            agent: { type: 'string', description: '按 Agent 过滤（可选）' },
+          },
+        },
+      },
+      {
+        name: 'note_update',
+        description: '更新笔记内容或 Agent',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            id: { type: 'number', description: '笔记ID' },
+            content: { type: 'string', description: '新的内容（可选）' },
+            agent: { type: 'string', description: '新的 Agent（可选）' },
+          },
+          required: ['id'],
+        },
+      },
+      {
+        name: 'note_delete',
+        description: '删除一条笔记',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            id: { type: 'number', description: '笔记ID' },
+          },
+          required: ['id'],
+        },
+      },
     ];
   }
 
@@ -188,8 +238,15 @@ export class LearningMCPServer {
       description: '查看所有未完成的学习任务',
       mimeType: 'text/markdown',
     });
+    // 添加聚合笔记资源
+    resources.push({
+      uri: 'notes://all',
+      name: '全部笔记（聚合）',
+      description: '返回所有 Agent 的全部笔记（Markdown 聚合）',
+      mimeType: 'text/markdown',
+    });
 
-
+    
     return resources;
   }
 
@@ -258,6 +315,14 @@ export class LearningMCPServer {
           return await this.todoManager.listTodos(args);
         case 'todo_delete':
           return await this.todoManager.deleteTodo(args.id);
+        case 'note_add':
+          return await this.noteManager.addNote(args);
+        case 'note_list':
+          return await this.noteManager.listNotes(args);
+        case 'note_update':
+          return await this.noteManager.updateNote(args);
+        case 'note_delete':
+          return await this.noteManager.deleteNote(args.id);
         default:
           throw new Error(`Unknown tool: ${name}`);
       }
@@ -296,6 +361,31 @@ export class LearningMCPServer {
               uri,
               mimeType: 'text/markdown',
               text: todos.content[0].text,
+            },
+          ],
+        };
+      }
+      if (uri === 'notes://all') {
+        const result = await this.noteManager.listNotes({});
+        return {
+          contents: [
+            {
+              uri,
+              mimeType: 'text/markdown',
+              text: (result.content[0] as any).text,
+            },
+          ],
+        };
+      }
+      if (uri.startsWith('notes://agent/')) {
+        const agent = uri.slice('notes://agent/'.length);
+        const result = await this.noteManager.listNotes({ agent });
+        return {
+          contents: [
+            {
+              uri,
+              mimeType: 'text/markdown',
+              text: (result.content[0] as any).text,
             },
           ],
         };
